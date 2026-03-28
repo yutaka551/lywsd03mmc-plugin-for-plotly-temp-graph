@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "OctoPrint-LYWSD03MMC-Plugin-for-PlotlyTempGraph"
-version = "0.1.0"
+version = "0.1.1"
 description = "OctoPrint plugin that adds LYWSD03MMC temperature and humidity sensor data to PlotlyTempGraph"
 authors = [
     {name = "yutaka551", email = "yutaka551butaman@gmail.com"}

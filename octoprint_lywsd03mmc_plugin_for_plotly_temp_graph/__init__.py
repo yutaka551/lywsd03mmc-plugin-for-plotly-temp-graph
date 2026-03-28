@@ -10,7 +10,8 @@ from lywsd03mmc import Lywsd03mmcClient
 class Lywsd03mmcPluginForPlotlyTempGraph(
     octoprint.plugin.SettingsPlugin,
     octoprint.plugin.TemplatePlugin,
-    octoprint.plugin.StartupPlugin
+    octoprint.plugin.StartupPlugin,
+    octoprint.plugin.RestartNeedingPlugin
 ):
     def __init__(self):
         self._temperature = None
@@ -18,7 +19,7 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
         self._battery = None
         self._last_update = 0
         self._update_thread = None
-        self._stop_thread = False
+        self._stop_event = threading.Event()
         self._client = None
 
     # SettingsPlugin mixin
@@ -33,6 +34,26 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
             humidity_label="LYWSD03MMC Humidity",
             battery_label="LYWSD03MMC Battery"
         )
+
+    def on_settings_save(self, data):
+        """Apply runtime changes immediately after saving plugin settings."""
+        old_mac_address = self._settings.get(["mac_address"])
+        octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+        new_mac_address = self._settings.get(["mac_address"])
+
+        # Reconnect when MAC changes so new settings take effect immediately.
+        if new_mac_address != old_mac_address:
+            self._logger.info("MAC address changed. Restarting sensor monitoring.")
+            self._stop_monitoring()
+            self._client = None
+
+        if new_mac_address:
+            self._start_monitoring()
+        else:
+            self._stop_monitoring()
+            self._temperature = None
+            self._humidity = None
+            self._battery = None
 
     # StartupPlugin mixin
 
@@ -58,28 +79,28 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
     def _start_monitoring(self):
         """Start the sensor monitoring thread"""
         if self._update_thread is None or not self._update_thread.is_alive():
-            self._stop_thread = False
+            self._stop_event.clear()
             self._update_thread = threading.Thread(target=self._monitor_sensor)
             self._update_thread.daemon = True
             self._update_thread.start()
 
     def _stop_monitoring(self):
         """Stop the sensor monitoring thread"""
-        self._stop_thread = True
+        self._stop_event.set()
         if self._update_thread:
-            self._update_thread.join(timeout=5)
+            self._update_thread.join(timeout=10)
 
     def _monitor_sensor(self):
         """Monitor the sensor and update values periodically"""
-        while not self._stop_thread:
+        while not self._stop_event.is_set():
             try:
                 self._read_sensor()
             except Exception as e:
                 self._logger.error("Error reading sensor: %s", e)
 
-            # Sleep for the configured interval
+            # Wait for the configured interval, or until stop is requested
             update_interval = self._settings.get_int(["update_interval"])
-            time.sleep(update_interval)
+            self._stop_event.wait(timeout=update_interval)
 
     def _read_sensor(self):
         """Read data from the LYWSD03MMC sensor"""
@@ -186,7 +207,7 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
 __plugin_name__ = "LYWSD03MMC Plugin for PlotlyTempGraph"
 __plugin_pythoncompat__ = ">=3.7,<4"
 __plugin_implementation__ = Lywsd03mmcPluginForPlotlyTempGraph()
-__plugin_version__ = "0.1.0"
+__plugin_version__ = "0.1.1"
 
 __plugin_hooks__ = {
     "octoprint.comm.protocol.temperatures.received": (__plugin_implementation__.callback, 1),
