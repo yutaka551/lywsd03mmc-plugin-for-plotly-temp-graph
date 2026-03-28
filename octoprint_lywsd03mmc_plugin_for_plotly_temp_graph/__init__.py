@@ -19,7 +19,7 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
         self._battery = None
         self._last_update = 0
         self._update_thread = None
-        self._stop_thread = False
+        self._stop_event = threading.Event()
         self._client = None
 
     # SettingsPlugin mixin
@@ -79,28 +79,28 @@ class Lywsd03mmcPluginForPlotlyTempGraph(
     def _start_monitoring(self):
         """Start the sensor monitoring thread"""
         if self._update_thread is None or not self._update_thread.is_alive():
-            self._stop_thread = False
+            self._stop_event.clear()
             self._update_thread = threading.Thread(target=self._monitor_sensor)
             self._update_thread.daemon = True
             self._update_thread.start()
 
     def _stop_monitoring(self):
         """Stop the sensor monitoring thread"""
-        self._stop_thread = True
+        self._stop_event.set()
         if self._update_thread:
-            self._update_thread.join(timeout=5)
+            self._update_thread.join(timeout=10)
 
     def _monitor_sensor(self):
         """Monitor the sensor and update values periodically"""
-        while not self._stop_thread:
+        while not self._stop_event.is_set():
             try:
                 self._read_sensor()
             except Exception as e:
                 self._logger.error("Error reading sensor: %s", e)
 
-            # Sleep for the configured interval
+            # Wait for the configured interval, or until stop is requested
             update_interval = self._settings.get_int(["update_interval"])
-            time.sleep(update_interval)
+            self._stop_event.wait(timeout=update_interval)
 
     def _read_sensor(self):
         """Read data from the LYWSD03MMC sensor"""
