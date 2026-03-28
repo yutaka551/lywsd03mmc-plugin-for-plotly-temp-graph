@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "LYWSD03MMC Plugin for PlotlyTempGraph"
+name = "lywsd03mmc-plugin-for-plotly-temp-graph"
 version = "0.1.1"
 description = "OctoPrint plugin that adds LYWSD03MMC temperature and humidity sensor data to PlotlyTempGraph"
 authors = [
